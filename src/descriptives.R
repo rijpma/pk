@@ -1,4 +1,4 @@
-setwd("~/repos/pkgold/")
+setwd("~/repos/pk/")
 
 library("readxl")
 library("data.table")
@@ -25,8 +25,6 @@ x <- rbindlist(
 )
 
 x[, i := .GRP, by = famid]
-x[, unique(i), by = part]
-x[, list(range(row), range(i)), by = part]
 
 # lowest and highest rownum pk_all found in check1
 which(pk_all$famid %in% check1$famid) |> min()
@@ -120,8 +118,8 @@ diff_kids <- 0.5
 # n <- 5000
 n <- 537
 # n <- 1000
-sim = function(n){
-        replicate(
+sim <- function(n) {
+    replicate(
         1000,
         t.test(rnorm(n, 1.6, 3), rnorm(n, 2.1, 3))
     )
