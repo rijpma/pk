@@ -42,16 +42,18 @@ which(pk_all$famid %in% check2$famid) |> max()
 # first, we subset on the first 1000
 pk1000 <- pk_all[1:1000, ]
 
-pk1000[, uniqueN(famid)]
+
 
 # note however the duplicates in the data
 pk1000[role1 == "RP" & type1 == "marriage" & type2 == "birth", sum(role2 == "child"), by = famid]
 pk1000[role1 == "RP" & type1 == "marriage" & type2 == "birth", sum(role2 == "child" & !duplicated(byear.y)), by = famid]
-pk1000[role1 == "RP" & type1 == "marriage" & type2 == "birth" & famid == 207078]
+# pk1000[role1 == "RP" & type1 == "marriage" & type2 == "birth" & famid == 207078]
 
 # so first we have to do something about the duplicates above
 # this is because of remarriages,
 # for now, just deduplicate on the basis of birthyear before conting
+cat("number of families in the checked data:\n")
+pk1000[, uniqueN(famid)]
 
 nkid <- pk1000[
     role1 == "RP" & type1 == "marriage" & type2 == "birth",
@@ -89,13 +91,19 @@ nkid[is.na(addc1), addc1 := 0]
 # note, addc2 is the useful check for us, other one is always zero
 
 # descriptives
-nkid[, mean(addc2 > 0)]
-nkid[, mean(nkid_original, na.rm = TRUE)]
-nkid[, mean(nkid_original + addc2, na.rm = TRUE)]
-nkid[, median(nkid_original, na.rm = TRUE)]
-nkid[, median(nkid_original + addc2, na.rm = TRUE)]
+nkid_mean_original <- nkid[, mean(nkid_original, na.rm = TRUE)]
+nkid_mean_addc2 <- nkid[, mean(addc2 > 0)]
+nkid_mean_total <- nkid[, mean(nkid_original + addc2, na.rm = TRUE)]
+nkid_median_original <- nkid[, median(nkid_original, na.rm = TRUE)]
+nkid_median_total <- nkid[, median(nkid_original + addc2, na.rm = TRUE)]
 
-t.test(nkid$nkid_original, nkid$nkid_original + nkid$addc2)
+cat("Mean children original:", nkid_mean_original, "\n")
+cat("Share of obserfvations with children added", nkid_mean_addc2, "\n")
+cat("Mean of original + added kids:", nkid_mean_total, "\n")
+cat("Median of original:", nkid_median_original, "\n")
+cat("Median of original + added kids:", nkid_median_total, "\n")
+
+# one sided t-test
 t.test(nkid$nkid_original, nkid$nkid_original + nkid$addc2, alternative = "less")
 
 par(mfrow = c(1, 2))
@@ -111,6 +119,9 @@ tboot <- function(d, ind) {
     return(tstat)
 }
 
+cat("bootstrap p-value:", boot(nkid, tboot, R = 1000)$t0)
+
+
 sd_kids <- sd(nkid$nkid_original)
 diff_kids <- 0.5
 
@@ -121,10 +132,12 @@ n <- 537
 sim <- function(n) {
     replicate(
         1000,
-        t.test(rnorm(n, 1.6, 3), rnorm(n, 2.1, 3))
+        t.test(rnorm(n, 1.6, 3), rnorm(n, 2.1, 3), alternative = "less")
     )
 }
-mean(unlist(sim(37)[3, ]) < 0.05)
-mean(unlist(sim(80)[3, ]) < 0.05)
-mean(unlist(sim(500)[3, ]) < 0.05)
-mean(unlist(sim(1000)[3, ]) < 0.05)
+
+cat("Proportion of p-values < 0.05 for n = 37:", mean(unlist(sim(37)[3, ]) < 0.05), "\n")
+cat("Proportion of p-values < 0.05 for n = 80:", mean(unlist(sim(80)[3, ]) < 0.05), "\n")
+cat("Proportion of p-values < 0.05 for n = 300:", mean(unlist(sim(300)[3, ]) < 0.05), "\n")
+cat("Proportion of p-values < 0.05 for n = 500:", mean(unlist(sim(500)[3, ]) < 0.05), "\n")
+cat("Proportion of p-values < 0.05 for n = 1000:", mean(unlist(sim(1000)[3, ]) < 0.05), "\n")
