@@ -21,8 +21,8 @@ mypar = function(...){
 }
 
 # read in data, spreak over two sheets, pks = original pk persons+roles, check is RvW's additions for missing persons+roles
-pks <- readxl::read_xlsx("dat/pk werkbestand 5000_after3rdscan-2.xlsx", sheet = "Processed")
-check <- readxl::read_xlsx("dat/pk werkbestand 5000_after3rdscan-2.xlsx", sheet = "MISSING_final")
+pks = readxl::read_xlsx("dat/pk werkbestand 5000_after3rdscan-2.xlsx", sheet = "Processed")
+check = readxl::read_xlsx("dat/pk werkbestand 5000_after3rdscan-2.xlsx", sheet = "MISSING_final")
 
 # PK/HSN supporting files
 occ = fread("./dat/R18/pkbrp.txt",
@@ -125,11 +125,11 @@ pks_rp = pks[role == "RP"]
 
 
 
-# Figure 1
+# Figure 4
 # Share of RPs’ life events on PKs linked to civil certificates over time (by RP cohort). Marriages are only reported for RPs who ever married..Figure x. Share of life events of RPs on PKs linked to public civil certificates.
 # found/not found over time (SEs are very involved, so omitted)
 # nb, can't just take mean(found) because then you do not necessarily get birth
-# and you need to have that both 
+# and you need to have that both
 toplot = pks_rp[,
     list(
         birth_found = any( (found_1 & type1 == "birth") | (found_2 & type2 == "birth" & role2 == "RP") ),
@@ -143,14 +143,14 @@ toplot[rp_ever_married == FALSE, marriage_found := NA]
 toplot[, rp_ever_married := NULL]
 toplot = melt(toplot, id.vars = c("cohort_rp", "famid"), variable.name = "type")
 toplot = toplot[, mean(value, na.rm = TRUE), by = list(cohort_rp, type)]
-pdf("./out/rp_found_bytype_both.pdf", height = 6)
+png("./out/rp_found_bytype_both.png", width = 700, height = 600, res = 100)
 mypar()
 plt(V1 ~ cohort_rp | type, data = toplot, type = "b", pch = 16,
     ylab = "share found", xlab = "cohort")
 dev.off()
 
 
-# Figue2 
+# Figure 5
 # Share of life events of RPs relatives on PKs linked to public civil certificates by RP cohort.
 # relatives found (limited to child and partner RP)
 
@@ -168,7 +168,7 @@ mypar()
 plt(share_found ~ cohort_rp | type2, facet = ~ role, data = toplot[role != "RP"][order(cohort_rp)], type = "b", pch = 16)
 dev.off()
 
-# Figure x. Distribution of children born on PKs, additions and pk originals
+# Figure 6. Distribution of children born on PKs, additions and pk originals
 # coverage
 toplot = pka[role1 == "child" & type1 == "birth", list(persid.x, byear.x, part)]
 toplot = unique(toplot)[, .N, by = list(byear.x = round(byear.x, -1), part)][order(byear.x, part)]
@@ -183,7 +183,36 @@ plt(
 )
 dev.off()
 
-# Figure 5: Average number of children born. Average number of children per RP by RP’s cohort, with (red) and without (black) corrections from civil registry
+
+# Figure 7 child missingness by child birth and cohort
+# take births from pka, deduplicate for multiple 2nd certificates per birth
+pka_births = pka[role1 == "child" & type1 == "birth"][!duplicated(persid.x)]
+
+pka_births[, .N, by = cohort][order(cohort)]
+
+toplot = rbindlist(
+    list(
+        RP = pka_births[, mean(part == "addition"), by = list(cohort = cohort_rp)],
+        RP_shifted = pka_births[, mean(part == "addition"), by = list(cohort = cohort_rp + 30)],
+        birth = pka_births[, mean(part == "addition"), by = cohort]
+    ),
+    idcol = "POV"
+)
+png("./out/kid_missingness.png", width = 700, height = 600, res = 100)
+mypar()
+plt(V1 ~ cohort | POV, data = toplot[cohort > 1860][order(cohort)], type = "b", pch = 16)
+dev.off()
+
+# Table 2
+# reasons for missingness
+totab = check[, .N, by = Reason]
+out = totab[order(-N)]
+knitr::kable(out)
+knitr::kable(out, format = "html") |>
+    writeLines("./out/reasons_lost.html")
+
+
+# Figure 8: Average number of children born. Average number of children per RP by RP’s cohort, with (red) and without (black) corrections from civil registry
 # n kids by cohort, with and without additions by rvw #
 # --------------------------------------------------- #
 nkids_pk = unique(pks[role == "child", list(famid, persid.x, byear_child = byear.x, byear_rp, cohort_rp)])
@@ -209,16 +238,6 @@ setorder(nkids, byear_rp)
 nkids[is.na(N_add), N_add := 0]
 nkids[, N_corrected := N_pk + N_add]
 
-# % households with missing kids
-share_missing_kids_fromRP = nkids[, list(share_w_missing = mean(N_add > 0)), by = cohort_rp]
-# pdf("./out/share_missing_children.pdf")
-png("./out/share_missing_children.png", width = 700, height = 600, res = 100)
-mypar()
-plt(share_w_missing ~ cohort_rp, data = share_missing_kids_fromRP,
-    ylab = "Share with missing child",
-    type = "b", pch = 19)
-dev.off()
-
 # average children implied by PKs
 toplot = nkids[,
     list(
@@ -236,34 +255,7 @@ legend("topright", fill = 1:2, legend = c("PK only", "PK + civreg additions"))
 dev.off()
 
 
-# Figure 6 child missingness by child birth and cohort
-# take births from pka, deduplicate for multiple 2nd certificates per birth
-pka_births = pka[role1 == "child" & type1 == "birth"][!duplicated(persid.x)]
-
-pka_births[, .N, by = cohort][order(cohort)]
-
-toplot = rbindlist(
-    list(
-        RP = pka_births[, mean(part == "addition"), by = list(cohort = cohort_rp)],
-        RP_shifted = pka_births[, mean(part == "addition"), by = list(cohort = cohort_rp + 30)],
-        birth = pka_births[, mean(part == "addition"), by = cohort]
-    ),
-    idcol = "POV"
-)
-png("./out/kid_missingness.png", width = 700, height = 600, res = 100)
-mypar()
-plt(V1 ~ cohort | POV, data = toplot[cohort > 1860][order(cohort)], type = "b", pch = 16)
-dev.off()
-
-
-# Table 2
-# reasons for missingness
-totab = check[, .N, by = Reason]
-out = totab[order(-N)]
-knitr::kable(out, format = "html") |> 
-    writeLines("./out/reasons_lost.html")
-
-
+# Figure 9, child mortality
 # infant and child mortality
 # note the high number of dyear missing
 pks[dyear.x > 0, age_at_death := dyear.x - byear.x]
@@ -277,7 +269,6 @@ pks[role == "child", na.omit(age_at_death)[1], by = persid.x][, .N, by = V1 == 4
 pks[role == "child", na.omit(age_at_death)[1], by = persid.x][, .N, by = V1 > 5]
 
 toplot = unique(pks[role == "child", list(persid.x, byear.x, dyear.x, age_at_death)])
-plt(~ byear.x | is.na(age_at_death), type = "hist", data = toplot)
 
 toplot[dyear.x <= 0, dyear.x := NA]
 toplot[order(byear.x), i := .I]
@@ -420,4 +411,3 @@ etable(mlist, vcov = "hetero")
 etable(mlist[5:8], vcov = "hetero") |>
     knitr::kable(format = "html") |>
     writeLines("./out/occreg.html")
-
