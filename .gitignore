@@ -1,0 +1,5 @@
+dat/
+*xlsx
+.DS_Store
+.Rapp.history
+.zed/
