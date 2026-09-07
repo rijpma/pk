@@ -27,7 +27,6 @@ check = readxl::read_xlsx("dat/pk werkbestand 5000_after3rdscan-2.xlsx", sheet =
 
 # Supporting PK/HSN files.
 occ = fread("./dat/R18/pkbrp.txt", encoding = "Latin-1")
-adr = fread("./dat/R18/pkadres.txt", encoding = "Latin-1")
 hisco = fread("~/data/hisco/HSN_HISCO_release_2020_02.csv", encoding = "Latin-1")
 topo = fread("~/data/hsn/HSNdocs/ToponiemenNL1812-2012Spatio-Temporeel.csv", encoding = "Latin-1")
 
@@ -45,7 +44,6 @@ pks[dyear.x <= 0, dyear.x := NA]
 pks[, row_id := .I]
 
 # Data fixes.
-pks[famid == 28451 & is.na(type2)]
 pks[famid == 28451 & row_id == 464 & is.na(type2), type2 := "marriage"]
 pks[is.na(famid), famid := 207009]
 pks[famid == 0, famid := 55232]
@@ -81,11 +79,12 @@ pks[role == "child", nkids := uniqueN(persid.x), by = famid]
 pks[, nkids := na.omit(nkids)[1], by = famid]
 pks[is.na(nkids), nkids := 0]
 
-# Ten-year birth cohorts; the earliest cohorts are thin, so fold cohorts <= 1870 into 1865.
+# Ten-year birth cohorts; the 1855-65 cohort is thin, so fold it (and any earlier
+# cohorts) into a single 1865 bucket.
 pks[, cohort := round(byear.x, -1)]
 pks[, cohort_rp := round(byear_rp, -1)]
 pks[cohort_rp <= 1870, cohort_rp := 1865]
-# pks = pks[cohort_rp > 1860]
+
 
 fwrite(pks, "./dat/pks_clean.csv")
 
@@ -95,7 +94,6 @@ pka = rbindlist(
     list(
         original = pks[, list(famid, persid.x, row_id = row_id, role1 = role1, type1 = type1, byear_rp = byear_rp, cohort_rp = cohort_rp, byear.x = byear.x)],
         addition = check[, list(famid, persid.x, row_id = NA, role1 = role1, type1 = type1, byear.x = byear.x)]
-        # ch2 = check2[, list(famid, row_id = NA)]
     ),
     fill = TRUE,
     idcol = "part"
@@ -160,7 +158,6 @@ png("./out/pk_childcoverage.png", width = 700, height = 600, res = 100)
 plt(
     N ~ byear.x | part,
     data = toplot,
-    # data = pka[role1 == "child", .N, by = list(byear.x = round(byear.x, -1), part)][order(byear.x, part)],
     type = "bar",
     main = "births on PKs", xlab = "year"
 )
@@ -222,7 +219,6 @@ toplot = nkids[,
         n_children_pk = mean(N_pk),
         n_children_corrected = mean(N_corrected)),
     by = cohort_rp]
-# pdf("./out/kidcorrection.pdf", height = 6)
 png("./out/kidcorrection.png", width = 700, height = 600, res = 100)
 mypar()
 matplot(toplot$cohort_rp, toplot[, -"cohort_rp"],
@@ -260,16 +256,9 @@ dev.off()
 # child is unavailable for childless RPs, age-25 location is missing for many RPs
 # with no clear pattern, and RP place of birth conflates a cultural measure. We
 # therefore park location and use occupation instead.
-no_occ_ids = setdiff(pks$famid, occ$IDNR)
-no_adress_ids = setdiff(pks$famid, adr$IDNR)
-
-setdiff(no_occ_ids, no_adress_ids)
-setdiff(no_adress_ids, no_occ_ids)
-# The two groups turn out to be largely the same.
 
 # Start with place of birth.
 pobrp = unique(pks[role == "RP", list(famid, byear_rp, loc = bloc.x)])
-# pobrp[, list(loc = unique(loc))][, list(.I, loc)] |> fwrite()
 
 # Standardise place names.
 pkplaces = fread("./dat/pkplaces.csv")
@@ -309,10 +298,7 @@ pobrp = merge(pobrp, hdng[year == 1930], by = "amco", all.x = TRUE)
 nkids = merge(pobrp, nkids, by = "famid")
 nkids[, urban := pop_31_12_f > 10e3]
 
-# setdiff(pks$famid, occ$IDNR)
-
 occ = occ[IDNR %in% pks$famid]
-adr = adr[IDNR %in% pks$famid]
 
 occ[, uniqueN(IDNR)]
 
@@ -340,10 +326,6 @@ nkids
 
 library("fixest")
 mlist = list(
-    # feols(N_pk ~ log(pop_31_12), data = nkids),
-    # feols(N_corrected ~ log(pop_31_12), data = nkids),
-    # feols(N_pk ~ urban, data = nkids),
-    # feols(N_corrected ~ urban, data = nkids),
     feols(N_pk ~ urban | cohort_rp, data = nkids),
     feols(N_corrected ~ urban | cohort_rp, data = nkids),
     fepois(N_pk ~ urban | cohort_rp, data = nkids),
